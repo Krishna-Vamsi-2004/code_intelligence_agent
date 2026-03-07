@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+pydantic
+transformers
+torch
+requests
+python-docx
+langchain
+langchain-huggingface
+langchain-core
+python-dotenv
