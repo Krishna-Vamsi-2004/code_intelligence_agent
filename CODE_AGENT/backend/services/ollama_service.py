@@ -186,235 +186,274 @@ Write the simplified beginner code:
     
     def generate_mermaid(self, code: str) -> str:
         """
-        Generate Mermaid flowchart diagram from Python code
-        
+        Generate Mermaid flowchart diagram from Python code using code analysis
+
         Args:
             code: Python code to analyze and create diagram from
-        
+
         Returns:
             Mermaid flowchart syntax
         """
-        # Analyze code to extract key elements
-        analysis = self._analyze_code_structure(code)
-        
-        prompt = f"""Convert this Python code to Mermaid flowchart syntax.
-
-Python code:
-```python
-{code}
-```
-
-Output the Mermaid flowchart starting with "flowchart TD":
-
-flowchart TD
-    Start([Start])"""
-        
         try:
-            logger.info("🎨 Generating Mermaid diagram from code logic")
-            
-            # Use stricter parameters for Mermaid generation
-            payload = {
-                "model": self.model_name,
-                "prompt": prompt,
-                "stream": False,
-                "options": {
-                    "temperature": 0.2,  # Low for structured output
-                    "num_predict": 800,  # Increased for complex diagrams
-                    "top_p": 0.9,
-                    "top_k": 40,
-                    "stop": ["Explanation:", "Note:", "This flowchart", "The above", "Here is"]  # Stop at explanations only
-                }
-            }
-            
-            logger.info(f"🤖 Calling Ollama with {self.model_name}")
-            
-            response = requests.post(
-                self.api_url,
-                json=payload,
-                timeout=90
-            )
-            
-            if response.status_code != 200:
-                logger.error(f"Ollama error: {response.status_code} - {response.text}")
-                return ""
-            
-            result = response.json()
-            generated_text = result.get("response", "")
-            
-            if not generated_text:
-                logger.warning("⚠️ Ollama returned empty Mermaid response")
-                return ""
-            
-            logger.info(f"✅ Ollama generated {len(generated_text)} chars")
-            logger.info(f"Raw Mermaid output: {generated_text[:300]}...")  # Log first 300 chars
-            
-            response = generated_text
-            
-            if response and len(response) > 20:
-                # Clean and validate Mermaid syntax
-                mermaid_code = response.strip()
-                
-                # First, try to extract from markdown code blocks
-                if '```mermaid' in mermaid_code:
-                    start = mermaid_code.find('```mermaid') + 10
-                    end = mermaid_code.find('```', start)
-                    if end > start:
-                        mermaid_code = mermaid_code[start:end].strip()
-                elif '```' in mermaid_code and 'flowchart' in mermaid_code:
-                    # Generic code block with flowchart inside
-                    start = mermaid_code.find('```') + 3
-                    end = mermaid_code.find('```', start)
-                    if end > start:
-                        mermaid_code = mermaid_code[start:end].strip()
-                
-                # Remove leading explanatory text before flowchart
-                if 'flowchart' in mermaid_code:
-                    flowchart_pos = mermaid_code.find('flowchart')
-                    if flowchart_pos > 0:
-                        # Check if there's explanatory text before flowchart
-                        before_text = mermaid_code[:flowchart_pos].strip()
-                        if before_text and not before_text.endswith('```'):
-                            # Remove everything before flowchart
-                            mermaid_code = mermaid_code[flowchart_pos:]
-                
-                # Remove any trailing explanations after the Mermaid code
-                explanation_markers = [
-                    'Explanation:', 'Note:', 'This flowchart', 'This diagram',
-                    'This is the', 'The flowchart', 'The diagram', 'In this',
-                    'Here is', 'Above is', 'This Mermaid', 'This code',
-                    'The above', 'As you can see'
-                ]
-                
-                for marker in explanation_markers:
-                    if marker in mermaid_code:
-                        # Only split if marker appears after some Mermaid content
-                        parts = mermaid_code.split(marker)
-                        if '-->' in parts[0] or '---' in parts[0]:
-                            mermaid_code = parts[0].strip()
-                
-                # Ensure it starts with flowchart
-                if not mermaid_code.startswith('flowchart'):
-                    if 'flowchart' in mermaid_code:
-                        # Extract from flowchart onwards
-                        flowchart_pos = mermaid_code.find('flowchart')
-                        mermaid_code = mermaid_code[flowchart_pos:]
-                    else:
-                        mermaid_code = 'flowchart TD\n' + mermaid_code
-                
-                # Remove any trailing explanations (lines that don't look like Mermaid)
-                lines = mermaid_code.split('\n')
-                clean_lines = []
-                found_flowchart = False
-                
-                for line in lines:
-                    stripped = line.strip()
-                    
-                    # Track if we've found the flowchart declaration
-                    if stripped.startswith('flowchart'):
-                        found_flowchart = True
-                        clean_lines.append(line)
-                        continue
-                    
-                    # Skip lines before flowchart declaration
-                    if not found_flowchart:
-                        continue
-                    
-                    # Keep lines that look like Mermaid syntax
-                    if (stripped and (
-                        '-->' in stripped or 
-                        '---' in stripped or
-                        '==>' in stripped or
-                        stripped.startswith(tuple('ABCDEFGHIJKLMNOPQRSTUVWXYZ')) or
-                        '([' in stripped or  # Terminal nodes
-                        '[' in stripped or   # Process nodes
-                        '{' in stripped or   # Decision nodes
-                        '(' in stripped or   # Various node types
-                        not stripped)):      # Empty lines
-                        clean_lines.append(line)
-                    else:
-                        # Stop at explanation text (sentences with spaces and no Mermaid syntax)
-                        if len(stripped.split()) > 3 and '-->' not in stripped:
-                            break
-                
-                mermaid_code = '\n'.join(clean_lines).strip()
-                
-                # Fix common Mermaid syntax errors
-                mermaid_code = self._fix_mermaid_syntax(mermaid_code)
-                
-                # Basic validation - check for arrows
-                if '-->' in mermaid_code or '---' in mermaid_code:
-                    logger.info(f"✅ Generated clean Mermaid diagram ({len(mermaid_code)} chars)")
-                    return mermaid_code
-                else:
-                    logger.warning("⚠️ Generated Mermaid missing flow arrows")
-                    return ""
-            else:
-                logger.warning("⚠️ Ollama returned empty Mermaid response")
-                return ""
-                
+            logger.info("🎨 Generating Mermaid diagram from code analysis")
+
+            # Analyze code structure with proper flow tracking
+            analysis = self._analyze_code_structure(code)
+
+            # Build Mermaid diagram from flow analysis
+            mermaid_lines = ["flowchart TD"]
+            mermaid_lines.append("    Start([Start])")
+
+            node_counter = 1
+            prev_node = "Start"
+            condition_index = 0
+
+            # Process flow sequentially to maintain logic order
+            for flow_item in analysis['flow']:
+                flow_type = flow_item['type']
+                content = flow_item['content']
+
+                if flow_type == 'input':
+                    # Input node
+                    node_id = f"Input{node_counter}"
+                    inp_display = self._clean_display_text(content)
+                    mermaid_lines.append(f"    {prev_node} --> {node_id}[\"Get {inp_display}\"]")
+                    prev_node = node_id
+                    node_counter += 1
+
+                elif flow_type == 'operation':
+                    # Operation node
+                    node_id = f"Op{node_counter}"
+                    op_display = content.replace('=', ':').strip()
+                    op_display = self._clean_display_text(op_display)
+                    if len(op_display) > 35:
+                        op_display = op_display[:32] + "..."
+                    mermaid_lines.append(f"    {prev_node} --> {node_id}[\"{op_display}\"]")
+                    prev_node = node_id
+                    node_counter += 1
+
+                elif flow_type == 'condition':
+                    # Decision node with branches
+                    if condition_index < len(analysis['conditions']):
+                        cond_data = analysis['conditions'][condition_index]
+                        check_node = f"Check{node_counter}"
+                        cond_display = self._clean_display_text(content)
+                        if len(cond_display) > 25:
+                            cond_display = cond_display[:22] + "..."
+
+                        # Add decision node
+                        mermaid_lines.append(f"    {prev_node} --> {check_node}{{{{{cond_display}}}}}")
+
+                        # Process true branch
+                        true_node = f"True{node_counter}"
+                        if cond_data['true_branch']:
+                            # Show actual operations in true branch
+                            true_content = cond_data['true_branch'][0]
+                            true_display = self._clean_display_text(true_content)
+                            if len(true_display) > 30:
+                                true_display = true_display[:27] + "..."
+                            mermaid_lines.append(f"    {check_node} -->|Yes| {true_node}[\"{true_display}\"]")
+                        else:
+                            mermaid_lines.append(f"    {check_node} -->|Yes| {true_node}[\"True Path\"]")
+
+                        # Process false branch
+                        false_node = f"False{node_counter}"
+                        if cond_data['false_branch']:
+                            # Show actual operations in false branch
+                            false_content = cond_data['false_branch'][0]
+                            false_display = self._clean_display_text(false_content)
+                            if len(false_display) > 30:
+                                false_display = false_display[:27] + "..."
+                            mermaid_lines.append(f"    {check_node} -->|No| {false_node}[\"{false_display}\"]")
+                        else:
+                            mermaid_lines.append(f"    {check_node} -->|No| {false_node}[\"False Path\"]")
+
+                        # Merge branches
+                        merge_node = f"Merge{node_counter}"
+                        mermaid_lines.append(f"    {true_node} --> {merge_node}[Continue]")
+                        mermaid_lines.append(f"    {false_node} --> {merge_node}")
+
+                        prev_node = merge_node
+                        node_counter += 1
+                        condition_index += 1
+
+                elif flow_type == 'output':
+                    # Output node
+                    node_id = f"Output{node_counter}"
+                    out_display = self._clean_display_text(content)
+                    if len(out_display) > 30:
+                        out_display = out_display[:27] + "..."
+                    mermaid_lines.append(f"    {prev_node} --> {node_id}[\"{out_display}\"]")
+                    prev_node = node_id
+                    node_counter += 1
+
+                elif flow_type == 'return':
+                    # Return node
+                    node_id = f"Return{node_counter}"
+                    ret_display = self._clean_display_text(content)
+                    if len(ret_display) > 30:
+                        ret_display = ret_display[:27] + "..."
+                    mermaid_lines.append(f"    {prev_node} --> {node_id}[\"return {ret_display}\"]")
+                    prev_node = node_id
+                    node_counter += 1
+
+            # Add final end node
+            mermaid_lines.append(f"    {prev_node} --> End([End])")
+
+            mermaid_code = '\n'.join(mermaid_lines)
+
+            # Fix any syntax issues
+            mermaid_code = self._fix_mermaid_syntax(mermaid_code)
+
+            logger.info(f"✅ Generated Mermaid diagram from code analysis ({len(mermaid_code)} chars)")
+            return mermaid_code
+
         except Exception as e:
             logger.error(f"Mermaid generation error: {e}")
-            return ""
+            # Return simple fallback
+            return """flowchart TD
+    Start([Start])
+    Start --> Process[Process Code]
+    Process --> End([End])"""
+
     
     def _analyze_code_structure(self, code: str) -> dict:
-        """Analyze code to extract key structural elements"""
+        """Analyze code to extract key structural elements with proper flow tracking"""
         lines = code.split('\n')
         analysis = {
             'inputs': [],
             'operations': [],
             'conditions': [],
-            'outputs': []
+            'outputs': [],
+            'flow': []  # Track sequential flow of operations
         }
         
-        for line in lines:
+        indent_stack = []  # Track indentation levels for nested structures
+        current_condition = None
+        in_true_branch = False
+        in_false_branch = False
+        
+        for i, line in enumerate(lines):
             stripped = line.strip()
             if not stripped or stripped.startswith('#'):
                 continue
             
+            # Calculate indentation level
+            indent = len(line) - len(line.lstrip())
+            
             # Detect inputs
             if 'input(' in stripped:
-                # Extract variable name
                 if '=' in stripped:
                     var_name = stripped.split('=')[0].strip()
                     analysis['inputs'].append(var_name)
+                    analysis['flow'].append({'type': 'input', 'content': var_name, 'indent': indent})
                 else:
                     analysis['inputs'].append('user_input')
-            
-            # Detect operations (assignments with calculations)
-            elif '=' in stripped and 'input(' not in stripped and 'def ' not in stripped:
-                # Extract variable and operation
-                parts = stripped.split('=', 1)
-                if len(parts) == 2:
-                    var_name = parts[0].strip()
-                    operation = parts[1].strip()
-                    # Skip if it's just a simple assignment without calculation
-                    if any(op in operation for op in ['+', '-', '*', '/', '%', '//']):
-                        analysis['operations'].append(f"{var_name} = {operation}")
+                    analysis['flow'].append({'type': 'input', 'content': 'user_input', 'indent': indent})
             
             # Detect conditions
             elif stripped.startswith('if ') or stripped.startswith('elif '):
                 condition = stripped.replace('if ', '').replace('elif ', '').replace(':', '').strip()
-                analysis['conditions'].append(condition)
+                analysis['conditions'].append({
+                    'condition': condition,
+                    'true_branch': [],
+                    'false_branch': [],
+                    'indent': indent
+                })
+                analysis['flow'].append({'type': 'condition', 'content': condition, 'indent': indent})
+                current_condition = len(analysis['conditions']) - 1
+                in_true_branch = True
+                in_false_branch = False
+            
+            # Detect else
+            elif stripped.startswith('else:'):
+                if current_condition is not None:
+                    in_true_branch = False
+                    in_false_branch = True
+                # Don't add else to flow - it's handled by the condition branching
+            
+            # Detect operations (assignments with calculations)
+            elif '=' in stripped and 'input(' not in stripped and 'def ' not in stripped and 'class ' not in stripped:
+                parts = stripped.split('=', 1)
+                if len(parts) == 2:
+                    var_name = parts[0].strip()
+                    operation = parts[1].strip()
+                    
+                    op_info = f"{var_name} = {operation}"
+                    
+                    # Add to appropriate branch if inside condition
+                    if current_condition is not None and indent > analysis['conditions'][current_condition]['indent']:
+                        if in_true_branch:
+                            analysis['conditions'][current_condition]['true_branch'].append(op_info)
+                        elif in_false_branch:
+                            analysis['conditions'][current_condition]['false_branch'].append(op_info)
+                    else:
+                        # Not in a condition, add to main operations
+                        if any(op in operation for op in ['+', '-', '*', '/', '%', '//', '**']):
+                            analysis['operations'].append(op_info)
+                        analysis['flow'].append({'type': 'operation', 'content': op_info, 'indent': indent})
+                        # Reset condition tracking if we're back at base indent
+                        if current_condition is not None and indent <= analysis['conditions'][current_condition]['indent']:
+                            current_condition = None
+                            in_true_branch = False
+                            in_false_branch = False
             
             # Detect outputs
             elif 'print(' in stripped:
-                # Extract what's being printed
                 start = stripped.find('print(') + 6
                 end = stripped.rfind(')')
                 if end > start:
                     print_content = stripped[start:end]
-                    analysis['outputs'].append(print_content)
+                    
+                    # Add to appropriate branch if inside condition
+                    if current_condition is not None and indent > analysis['conditions'][current_condition]['indent']:
+                        if in_true_branch:
+                            analysis['conditions'][current_condition]['true_branch'].append(f"print {print_content}")
+                        elif in_false_branch:
+                            analysis['conditions'][current_condition]['false_branch'].append(f"print {print_content}")
+                    else:
+                        analysis['outputs'].append(print_content)
+                        analysis['flow'].append({'type': 'output', 'content': print_content, 'indent': indent})
+                        # Reset condition tracking
+                        if current_condition is not None and indent <= analysis['conditions'][current_condition]['indent']:
+                            current_condition = None
+                            in_true_branch = False
+                            in_false_branch = False
             
             # Detect return statements
             elif stripped.startswith('return '):
                 return_val = stripped.replace('return ', '').strip()
-                analysis['outputs'].append(f"return {return_val}")
+                
+                # Add to appropriate branch if inside condition
+                if current_condition is not None and indent > analysis['conditions'][current_condition]['indent']:
+                    if in_true_branch:
+                        analysis['conditions'][current_condition]['true_branch'].append(f"return {return_val}")
+                    elif in_false_branch:
+                        analysis['conditions'][current_condition]['false_branch'].append(f"return {return_val}")
+                else:
+                    analysis['outputs'].append(f"return {return_val}")
+                    analysis['flow'].append({'type': 'return', 'content': return_val, 'indent': indent})
         
         # If no specific elements found, provide generic description
-        if not any(analysis.values()):
+        if not any([analysis['inputs'], analysis['operations'], analysis['conditions'], analysis['outputs']]):
             analysis['operations'].append('process data')
+            analysis['flow'].append({'type': 'operation', 'content': 'process data', 'indent': 0})
         
         return analysis
+    
+    def _clean_display_text(self, text: str) -> str:
+        """Clean text for Mermaid display by removing special characters"""
+        text = text.replace('[', '').replace(']', '')
+        text = text.replace('{', '').replace('}', '')
+        text = text.replace('(', '').replace(')', '')
+        text = text.replace('^', '').replace('$', '')
+        text = text.replace('+', 'plus').replace('*', 'times')
+        text = text.replace('@', 'at').replace('#', 'hash')
+        text = text.replace('|', 'or').replace('&', 'and')
+        text = text.replace('<', 'lt').replace('>', 'gt')
+        text = text.replace('"', '').replace("'", '')
+        text = text.replace('\\n', ' ').replace('\\t', ' ')
+        return text
     
     def _fix_mermaid_syntax(self, mermaid_code: str) -> str:
         """Fix common Mermaid syntax errors"""
@@ -513,71 +552,113 @@ flowchart TD
     def _create_meta_prompt(self, task: str, user_level: str) -> str:
         """Create meta-prompt based on user level"""
         
-        if user_level == 'beginner':
-            return f"""You are writing code for an absolute beginner who just started learning Python TODAY.
-
-CRITICAL - THESE ARE FORBIDDEN:
-❌ NO "def" keyword anywhere
-❌ NO "class" keyword anywhere
-❌ NO functions of any kind
-❌ NO classes of any kind
-❌ NO type hints (no ":")
-❌ NO complex logic
-
-REQUIRED STRUCTURE (copy this pattern):
-1. Get input with input()
-2. Do ONE calculation
-3. Print result with print()
-4. Maximum 8 lines total
-
-CORRECT EXAMPLE for "check if even":
-num = int(input("Enter number: "))
-if num % 2 == 0:
-    print("Even")
-else:
-    print("Odd")
-
-WRONG EXAMPLE (DO NOT DO THIS):
-def is_even(num):  # ❌ NO FUNCTIONS!
-    return num % 2 == 0
+        if user_level.lower() == 'beginner':
+            return f"""BEGINNER LEVEL - Write the SIMPLEST possible Python code.
 
 Task: {task}
 
-Write ONLY the simplest possible code (NO functions, NO classes):
+STRICT RULES:
+- NO def (no functions)
+- NO class (no classes)  
+- NO type hints
+- NO imports (unless absolutely required)
+- Maximum 10 lines
+- Use only: input(), print(), if/else, basic math
+
+EXAMPLE for "add two numbers":
+a = int(input("First number: "))
+b = int(input("Second number: "))
+result = a + b
+print("Sum:", result)
+
+Now write BEGINNER code for: {task}
 
 ```python"""
 
-        elif user_level == 'intermediate':
-            return f"""You are writing intermediate Python code.
-
-RULES:
-- Use 1-2 simple functions with docstrings
-- Add try-except for input validation
-- NO classes
-- NO menus or while loops
-- Keep under 30 lines
-- Make it interactive with input() and print()
+        elif user_level.lower() == 'intermediate':
+            return f"""INTERMEDIATE LEVEL - Write clean, functional Python code.
 
 Task: {task}
 
-Write intermediate Python code:
+REQUIREMENTS:
+- Use 1-2 functions with docstrings
+- Add error handling (try/except)
+- NO classes
+- NO complex menus
+- 15-30 lines
+- Interactive with input/output
+
+EXAMPLE for "add two numbers":
+def add_numbers():
+    \"\"\"Add two numbers with validation\"\"\"
+    try:
+        a = float(input("First number: "))
+        b = float(input("Second number: "))
+        result = a + b
+        print(f"Sum: {{result}}")
+    except ValueError:
+        print("Error: Invalid input")
+
+if __name__ == "__main__":
+    add_numbers()
+
+Now write INTERMEDIATE code for: {task}
 
 ```python"""
 
         else:  # advanced
-            return f"""You are writing advanced Python code.
-
-RULES:
-- Use class-based design with proper OOP
-- Add type hints from typing module
-- Create interactive menu (run, stats, quit)
-- Track statistics in class attributes
-- Professional structure with docstrings
-- Use if __name__ == "__main__"
+            return f"""ADVANCED LEVEL - Write professional, production-ready Python code.
 
 Task: {task}
 
-Write advanced Python code:
+REQUIREMENTS:
+- Class-based OOP design
+- Type hints (from typing import ...)
+- Interactive menu system
+- Statistics tracking
+- Comprehensive docstrings
+- Error handling
+- if __name__ == "__main__" guard
+
+EXAMPLE for "add two numbers":
+from typing import List
+
+class Calculator:
+    \"\"\"Professional calculator with history\"\"\"
+    
+    def __init__(self):
+        self.history: List[str] = []
+    
+    def add(self, a: float, b: float) -> float:
+        \"\"\"Add two numbers and track history\"\"\"
+        result = a + b
+        self.history.append(f"{{a}} + {{b}} = {{result}}")
+        return result
+    
+    def show_history(self):
+        \"\"\"Display calculation history\"\"\"
+        print("\\nHistory:")
+        for calc in self.history:
+            print(f"  {{calc}}")
+
+if __name__ == "__main__":
+    calc = Calculator()
+    while True:
+        print("\\n1. Add  2. History  3. Quit")
+        choice = input("Choose: ")
+        if choice == '1':
+            try:
+                a = float(input("First: "))
+                b = float(input("Second: "))
+                print(f"Result: {{calc.add(a, b)}}")
+            except ValueError:
+                print("Invalid input")
+        elif choice == '2':
+            calc.show_history()
+        elif choice == '3':
+            break
+
+Now write ADVANCED code for: {task}
 
 ```python"""
     

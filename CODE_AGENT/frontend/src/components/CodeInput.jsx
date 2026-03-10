@@ -20,16 +20,17 @@ const CodeInput = ({ onRun, loading }) => {
         <h2 className="text-xl font-black bg-clip-text text-transparent bg-gradient-to-r from-agent-primary to-agent-secondary tracking-tight">
           Request Intelligence
         </h2>
-        <div className="flex flex-wrap items-center gap-2 p-1.5 bg-black/20 rounded-xl border border-agent-border/50">
+        <div className="flex items-center gap-2 p-2 bg-black/20 rounded-xl border border-agent-border/50 overflow-hidden">
           {levels.map((l) => (
             <button
               key={l}
               onClick={() => setLevel(l)}
-              className={`flex-1 min-w-[70px] px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
+              className={`flex-1 px-2 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-tight transition-all duration-300 whitespace-nowrap ${
                 level === l
-                  ? "bg-agent-primary text-white shadow-lg shadow-agent-primary/20"
-                  : "bg-transparent text-gray-500 hover:text-gray-300 hover:bg-white/5"
+                  ? "bg-gradient-to-r from-agent-primary to-agent-secondary text-white shadow-lg shadow-agent-primary/30"
+                  : "bg-transparent text-gray-400 hover:text-white hover:bg-white/10"
               }`}
+              title={`Select ${l} level`}
             >
               {l}
             </button>
